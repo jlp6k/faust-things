@@ -1,2 +1,3 @@
-# faust-things
-Faust related projects
+# Faust Things
+
+Faust audio stream related projects
