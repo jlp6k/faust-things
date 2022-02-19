@@ -32,7 +32,7 @@ declare license "GNU General Public License v3 or later";
 
     * Audio I/O
         - Manual input and output gain control.
-        - Recording time: BUFFER_DURATION.
+        - Recording time: `BUFFER_DURATION`.
         - The FREEZE button freezes the content of the recording table.
         - Feedback path with attenuation and limiter (with 1 sample delay). The feedback signal comes from
           the grains output (it's before the dry/wet crossfader).
@@ -44,24 +44,20 @@ declare license "GNU General Public License v3 or later";
     * Grains generation modes
         - The SEED button triggers a grain.
         - Automatically trigger grains at a periodic rate with the DENSITY parameter (at maximum density
-          there are 1000 grains generated per second (M.I. Beads has a maximum rate of ~260 grains per second).
-        Note: The actual number of triggered grains cannot exceed the CONCURRENT_GRAINS value (30 for M.I. Beads).
-        TODO: Automatically trigger grains at a randomized rate.
-        TODO: Start a chain of delayed and pitched grains instead of a single one.
+          there are 1000 grains generated per second (M.I. Beads has a maximum rate of ~260 grains per second).  
+        Note: The actual number of triggered grains cannot exceed the `CONCURRENT_GRAINS` value (30 for M.I. Beads).
+        - TODO: Automatically trigger grains at a randomized rate.
+        - TODO: Start a chain of delayed and pitched grains instead of a single one.
     * Grain parameters
-        - TIME: Controls the playback position within the table.
-          NO NO NO! When the FREEZE toggle button is engaged, as the input signal isn't changing anymore, a slice
-          from the table is continuously looped to simulate a live feed. The duration of the slice depends
-          on the TIME knob.
-          When the the audio isn't FREEZEd, the TIME knob delays the grains.
+        - TIME: Controls the playback position of each grain within the table. In other words, it delays the grains. 
         - SIZE: Grain duration from 0.03 seconds to the table length, forward or backward playback.
         - SHAPE: The shape of the grain envelope. The shape control allows to morph the shape from a square
           (in this case the grain original amplitude is maintained), to an inverted saw (slow release), to a triangle
           (attack and release time are the same), and finally to a saw (slow attack).
-        - PITCH: The pitch of the grain (-2..+2 octaves).
+        - PITCH: The pitch of the grain (-2..+2 octaves).  
         Note: The four grain parameters are latched when a grain is triggered. Hence, the grain parameters
               remain the same throughout the grain playback but they may differ for multiple grains.
-        TODO: TIME slew limiter for tape like scrubing effect. 
+        - TODO: TIME slew limiter for tape like scrubing effect.
 
     #### Usage
 
@@ -120,16 +116,45 @@ environment {
     // So the actual sample rate at run time may differ from 48k.
     // Tablesize must be provided at compile time and the actual buffer duration will be greater
     // than the one requeried if ma.SR < 48000.
-    tablesize = ceil(BUFFER_DURATION * 48000) : int;
-    table = rwtable(tablesize, 0.0);
+    _tablesize = ceil(BUFFER_DURATION * 48000) : int;
+    _table = rwtable(_tablesize, 0.0);
 
-    grain(grain_number, trigger, writeIndex, g_active,
-          time_ctrl,
-          size_ctrl,
-          pitch_ctrl,
-          reverse_ctrl,
-          plateau_width_ctrl,
-          plateau_position_ctrl) = (writeIndex, _, readIndex : table : *(envelope)), gate
+    /*
+        The _grain function is responsible of producing a grain of sound. It has one input (+ its numerous
+        parameters) and 2 outputs. Its input is an audio signal from which the gran is produced and 2 outputs
+        the grain and a gate. The gate equals 1 when the _grain function produces a grain and 0 otherwise.
+
+        #### Usage
+
+        ```
+        _ : _grain(grain_number, trigger, writeIndex, g_active, time_ctrl, size_ctrl,
+                   pitch_ctrl, reverse_ctrl, plateau_width_ctrl, plateau_position_ctrl) : _, _
+        ```
+
+        Where:
+
+        * grain_number: (int > 0) a constant number identifying each instance of the _grain function. This parameter 
+          is currently unused.
+        * trigger: [0|1] A rising front of the trigger parameter fires the playback of a grain.
+        * writeIndex: (int ∈ [0, tablesize - 1]) the current position of the _table writeIndex.
+        * g_active: (int ∈ [1, `CONCURRENT_GRAINS`]) a number used to differenciate succesive grains playback.
+          It is increased at each triggered grain (modulo the number of _grain instances). At the moment, it
+          is used to play a different chunck of the _table when the recording is FREEZEd.
+        * time_ctrl: [0, 1] controls how far the grains (the play heads) are distributed across the _table from
+          the write head/writeIndex.
+        * size_ctrl: [0.03, `BUFFER_DURATION`] the duration of the playback.
+        * pitch_ctrl: (float > 0) a ratio of the playback speed relative to `ma.SR`.
+        * reverse_ctrl: [0|1] 0: forward playback, 1: backward playback.
+        * plateau_width_ctrl: [0, 1] the width of the window envelope plateau. The window envelope has 3 parts:
+          a raising edge, a plateau (of amplitude 1), a falling edge. When the plateau width equals 0, the raising
+          edge is immediatly followed by the falling edge and, when the plateau width equals 1, raising and falling 
+          edge are instantaneous.
+        * plateau_position_ctrl: [0, 1] the position of the window envelope plateau. When 0: the plateau is at the
+          beginning of the window (it implies an instantaneous raising edge), when 1: the plateau is at the end of
+          the window (it implies an instantaneous falling edge).
+    */
+    _grain(grain_number, trigger, writeIndex, g_active, time_ctrl,size_ctrl, pitch_ctrl, reverse_ctrl,
+           plateau_width_ctrl, plateau_position_ctrl) = (writeIndex, _, readIndex : _table : *(envelope)), gate
     with {
         // g_size: the number of samples of the grain
         // g_speed: the speed factor of the grain playback
@@ -138,11 +163,13 @@ environment {
         g_speed = pitch_ctrl;
         g_playback_size = g_size / g_speed : ba.latch(trigger) : int;
         g_direction = select2(reverse_ctrl, 1, -1) : ba.latch(trigger);
-        // If recording is not FREEZEd, TIME controls the distance the record head (up to 1 tablesize).
+        // If recording is not FREEZEd, TIME controls the grain distance from the record head (up to 1 tablesize).
         // If recording is FREEZEd, TIME controls how far the grains (the play heads) are distributed
         // across the table. This way, two consecutive SEEDing produce two different grains.
+//        g_start_index =
+//            writeIndex + (_tablesize * time_ctrl * select2(writeIndex == writeIndex', 1, g_active / CONCURRENT_GRAINS)) : ba.latch(trigger) : int;
         g_start_index =
-            writeIndex + (tablesize * time_ctrl * select2(writeIndex == writeIndex', 1, g_active / CONCURRENT_GRAINS)) : ba.latch(trigger) : int;
+            writeIndex + (_tablesize * time_ctrl * g_active / CONCURRENT_GRAINS) : ba.latch(trigger) : int;
         // compute window attack and sustain in proportions of the total envelope
         // from plateau width and position
         g_sustain = plateau_width_ctrl : ba.latch(trigger);
@@ -152,7 +179,7 @@ environment {
         count = counter(g_playback_size, (g_size - 1) * g_direction, trigger);
 
         // table read index
-        readIndex = (g_start_index + count) % tablesize : int;
+        readIndex = (g_start_index + count) % _tablesize : int;
         // TODO? Beads stops playback when readIndex reaches/crosses writeIndex.
 
         // Window
@@ -177,8 +204,40 @@ environment {
         gate = count : >(0);
     };
 
-    grains(freeze_ctrl, writeIndex_ui, density_ctrl, seed_ctrl, input_gain_ctrl, feedback_ctrl, output_gain_ctrl,
-           wetting_ctrl, time_ctrl, size_ctrl, size_ctrl, pitch_ctrl, reverse_ctrl,
+    /*
+        grains function get the control values. Some are processed locally the rest is passed to the parallelized
+        grain functions.
+
+        #### Usage
+
+        ```
+        _ : grains(freeze_ctrl, writeIndex_ctrl, density_ctrl, seed_ctrl, input_gain_ctrl, feedback_ctrl,
+                    output_gain_ctrl, wetting_ctrl, time_ctrl, size_ctrl, pitch_ctrl, reverse_ctrl,
+                    plateau_width_ctrl, plateau_position_ctrl) : _
+        ```
+
+        Where:
+
+        * freeze_ctrl: [0|1] 0: the grains function input is continuously recorded in a looping buffer,
+          1: the input isn't recorded.
+        * writeIndex_disp: a function that takes one parameter corresponding to the current position of
+          the _table write head. The current position is an int ∈ [0, `_tablesize` - 1].
+        * density_ctrl: (float) period in seconds between 2 automatic triggering of a grain. Values lesser
+          than 0.01 are ignored (doesn't trigger).
+        * seed_ctrl: [0|1] a transition from 0 to 1 triggers a grain.
+        * input_gain_ctrl: (float) input gain.
+        * feedback_ctrl: [0, 1] feedback gain.
+        * output_gain_ctrl: (float) input gain.
+        * wetting_ctrl: [0, 1] dry/wet control value. 0: dry, 1: wet.
+        * time_ctrl: [0, 1] this parameter is passed to the _grain function.
+        * size_ctrl: [0.03, `BUFFER_DURATION`] this parameter is passed to the _grain function.
+        * pitch_ctrl: (float > 0) this parameter is passed to the _grain function.
+        * reverse_ctrl: [0|1] this parameter is passed to the _grain function.
+        * plateau_width_ctrl: [0, 1] this parameter is passed to the _grain function.
+        * plateau_position_ctrl: [0, 1] this parameter is passed to the _grain function.
+    */
+    grains(freeze_ctrl, writeIndex_disp, density_ctrl, seed_ctrl, input_gain_ctrl, feedback_ctrl,
+           output_gain_ctrl, wetting_ctrl, time_ctrl, size_ctrl, pitch_ctrl, reverse_ctrl,
            plateau_width_ctrl, plateau_position_ctrl) =
         // The output of the grains is fed back into the input stage.
         (input_stage : ((voices_parameters : g_voices), _)) ~ _ : output_stage
@@ -191,7 +250,7 @@ environment {
         // It allows the spread some behavior across the triggered grains.
         // For instance, passing increasing values to the grains allows them to be spread across the table.
         trigger = (seed_ctrl : ba.impulsify), ba.pulse(g_density) * (density_ctrl >= 0.01) :> _;
-        g_active = trigger : (+ : %(10)) ~ _ : +(1);
+        g_active = trigger : (+ : %(CONCURRENT_GRAINS)) ~ _ : +(1);
 
         // The input_stage has 2 inputs (audio input and feedback) and 2 identical outputs
         // (one for the voices and for the dry signal)
@@ -202,7 +261,7 @@ environment {
 
         // The writeIndex travels the table indices continuously except when the freeze button
         // is engaged.
-        writeIndex = writeIndex_counter(tablesize, 1 - freeze_ctrl) : int : writeIndex_ui
+        writeIndex = writeIndex_counter(_tablesize, 1 - freeze_ctrl) : int <: attach(_, writeIndex_disp)
         with {
             // TODO? When frozen, smooth the transition between the the newest sample and the oldest.
             writeIndex_counter(size, run) = %(size) ~ +(run);
@@ -213,65 +272,63 @@ environment {
 
         // DC offset may appear with short grains, it is removed with the dcblockerat filter stage
         // grain() has 8 parameters: g_active and the audio input + 6 control signals
-        g_voices = voices(CONCURRENT_GRAINS, grain, 9, trigger) : fi.dcblockerat(16);
+        g_voices = voices(CONCURRENT_GRAINS, _grain, 9, trigger) : fi.dcblockerat(16);
     };
 
     ui(uix) =
-        grains(freeze_ctrl, writeIndex_ui, density_ctrl, seed_ctrl, input_gain_ctrl, feedback_ctrl, output_gain_ctrl,
-               wetting_ctrl, time_ctrl, size_ctrl, size_ctrl, pitch_ctrl, reverse_ctrl,
-               plateau_width_ctrl, plateau_position_ctrl)
+        hgroup("granola %uix",
+               grains(freeze_ui, writeIndex_ui, density_ui, seed_ui, input_gain_ui, feedback_ui, output_gain_ui,
+                      wetting_ui, time_ui, size_ui, pitch_ui, reverse_ui, plateau_width_ui, plateau_position_ui))
     with {
-        // FREEZE recording
-        freeze_ctrl = checkbox("h:granola %uix/v:global/v:index/[1]Freeze");
-        writeIndex_ui =  hbargraph("h:granola %uix/v:global/v:index/[0]writeIndex", 0, tablesize - 1);
+        // FREEZE / recording
+        freeze_ui = checkbox("v:global/v:index/[1]Freeze");
+        writeIndex_ui = hbargraph("v:global/v:index/[0]writeIndex", 0, _tablesize - 1);
 
-        // Automatic triggering from 0.1 to 100Hz
-        density_ctrl = hslider("h:granola %uix/v:grains/[0]density[unit:Hz][scale:log]", 1, 0.01, 1000, 0.01);
+        // Automatic triggering from 0.1 to 1000Hz
+        density_ui = hslider("v:grains/[0]density[unit:Hz][scale:log]", 1, 0.01, 1000, 0.01) : si.smoo;
         // Manual triggering
-        seed_ctrl = button("h:granola %uix/v:grains/SEED");
+        seed_ui = button("v:grains/SEED");
         // Input Gain
-        input_gain_ctrl = vslider("h:granola %uix/v:global/h:volumes/h:input/[0]gain", 0, -1.5, 1, 0.01) : si.smoo : bipollin2exppos(100);
+        input_gain_ui = vslider("v:global/h:volumes/h:input/[0]gain", 0, -1.5, 1, 0.01) : si.smoo : bipollin2exppos(100);
         // Feedback
-        feedback_ctrl = vslider("h:granola %uix/v:global/h:volumes/h:input/[1]feedback", 0, 0, 1, 0.01) : si.smoo;
+        feedback_ui = vslider("v:global/h:volumes/h:input/[1]feedback", 0, 0, 1, 0.01) : si.smoo;
         // Output gain
-        output_gain_ctrl = vslider("h:granola %uix/v:global/h:volumes/h:output/[1]gain", 0, -1, 1, 0.01) : si.smoo : bipollin2exppos(100);
+        output_gain_ui = vslider("v:global/h:volumes/h:output/[1]gain", 0, -1, 1, 0.01) : si.smoo : bipollin2exppos(100);
         // dry (0) / wet (1)
-        wetting_ctrl = vslider("h:granola %uix/v:global/h:volumes/h:output/[0]dry/wet[tooltip:0:dry, 1:wet]", 0.5, 0, 1, 0.01) : si.smoo;
+        wetting_ui = vslider("v:global/h:volumes/h:output/[0]dry/wet[tooltip:0:dry, 1:wet]", 0.5, 0, 1, 0.01) : si.smoo;
 
         // position in the table
-        time_ctrl = hslider("h:granola %uix/v:grains/[0]time", 0, 0, 1, 0.001);
+        time_ui = hslider("v:grains/[0]time", 0, 0, 1, 0.001) : si.smoo;
         // Grain size
-        size_ctrl = hslider("h:granola %uix/v:grains/[2]size[unit:s]", 0.5, 0.03, BUFFER_DURATION, 0.01);
+        size_ui = hslider("v:grains/[2]size[unit:s]", 0.5, 0.03, BUFFER_DURATION, 0.01) : si.smoo;
         // Grain pitch
-        pitch_ctrl = hslider("h:granola %uix/v:grains/[5]pitch[unit:semi]", 0, -24, 24, 0.5) : ba.semi2ratio;
+        pitch_ui = hslider("v:grains/[5]pitch[unit:semi]", 0, -24, 24, 0.5) : ba.semi2ratio;
         // Backward playback
-        reverse_ctrl = checkbox("h:granola %uix/v:grains/[6]REVERSE");
+        reverse_ui = checkbox("v:grains/[6]REVERSE");
 
         // Grain envelope shape
-        shape_ctrl = hslider("h:granola %uix/v:grains/[7]shape", 0, 0, 1, 0.01);
+        shape_ui = hslider("v:grains/[7]shape", 0, 0, 1, 0.01);
         // In order to reduce the number of control knobs, the window plateau width and plateau position
         // are extrapolated from a single shape control. The shape control varies from 0 to 1, smoothly
         // morphing the window envelope from a constant 1, to a decreasing ramp, to a triangle and to an
         // increasing ramp/saw.
-        plateau_width_ctrl = 1 - min(shape_ctrl * 3, 1);
-        plateau_position_ctrl = max((3 * shape_ctrl/2) - 0.5, 0);
+        plateau_width_ui = 1 - min(shape_ui * 3, 1);
+        plateau_position_ui = max((3 * shape_ui / 2) - 0.5, 0);
         /*
         // Window plateau width
-        plateau_width_ctrl =
-            hslider("h:granola %uix/v:grains/v:window/[0]plateau_width", 0.5, 0, 1, 0.001);
+        plateau_width_ui =
+            hslider("v:grains/v:window/[0]plateau_width", 0.5, 0, 1, 0.001);
         // Window plateau position
-        plateau_position_ctrl =
-            hslider("h:granola %uix/v:grains/v:window/[1]plateau_position", 0.5, 0.05, 0.95, 0.001);
+        plateau_position_ui =
+            hslider("v:grains/v:window/[1]plateau_position", 0.5, 0.05, 0.95, 0.001);
         */
     };
 
-    demo = Granola(5, 33).ui(0) : co.limiter_1176_R4_mono : hgroup("utilities", ve.moogLadder(normFreq,Q) <: dm.zita_light)
-    with {
-        fr = hslider("v:moogvcf/[1]cutoff[unit:Hz]", 20000, 20, 20000, 0.1) : si.smoo;
-        res = hslider("v:moogvcf/[2]resonance", 0, 0, 0.99, 0.01) : si.smoo;
-        
-        Q = hslider("v:moogLadder/[1]Q",0.7072,0.7072,25,0.01);
-        normFreq = hslider("v:moogLadder/[0]normFreq",1,0,1,0.001):si.smoo;
+    demo = Granola(5, 33).ui(0) : co.limiter_1176_R4_mono : hgroup("utilities", fi.resonlp(cutoff_freq,Q,gain) <: dm.zita_light)
+with {
+    cutoff_freq = hslider("v:resonlp/[0]cutoff_freq",8000,0,8000,0.01) : si.smoo;
+    Q = hslider("v:resonlp/[1]Q",1,1,10,0.01) : si.smoo;
+    gain = hslider("v:resonlp/[2]gain",1,0,2,0.01):si.smoo;
     };
 };
 
