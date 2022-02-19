@@ -29,11 +29,7 @@ The grain processor is inspired by the Mutable Instruments Beads. The grain wind
     - TODO: Automatically trigger grains at a randomized rate.
     - TODO: Start a chain of delayed and pitched grains instead of a single one.
 * Grain parameters
-    - TIME: Controls the playback position within the table. 
-        NO NO NO! When the FREEZE toggle button is engaged, as the input signal isn't changing anymore, a slice
-        from the table is continuously looped to simulate a live feed. The duration of the slice depends
-        on the TIME knob. 
-        When the the audio isn't FREEZEd, the TIME knob delays the grains. 
+    - TIME: Controls the playback position of each grain within the table. In other words, it delays the grains.
     - SIZE: Grain duration from 0.03 seconds to the table length, forward or backward playback.
     - SHAPE: The shape of the grain envelope. The shape control allows to morph the shape from a square
         (in this case the grain original amplitude is maintained), to an inverted saw (slow release), to a triangle
