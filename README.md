@@ -24,7 +24,7 @@ The grain processor is inspired by the Mutable Instruments Beads. The grain wind
 * Grains generation modes
     - The SEED button triggers a grain.
     - Automatically trigger grains at a periodic rate with the DENSITY parameter (at maximum density
-        there are 1000 grains generated per second (M.I. Beads has a maximum rate of ~260 grains per second). 
+        there are 1000 grains generated per second (M.I. Beads has a maximum rate of ~260 grains per second).  
     Note: The actual number of triggered grains cannot exceed the CONCURRENT_GRAINS value (30 for M.I. Beads).
     TODO: Automatically trigger grains at a randomized rate.
     TODO: Start a chain of delayed and pitched grains instead of a single one.
