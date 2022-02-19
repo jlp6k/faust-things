@@ -26,22 +26,22 @@ The grain processor is inspired by the Mutable Instruments Beads. The grain wind
     - Automatically trigger grains at a periodic rate with the DENSITY parameter (at maximum density
         there are 1000 grains generated per second (M.I. Beads has a maximum rate of ~260 grains per second).  
     Note: The actual number of triggered grains cannot exceed the CONCURRENT_GRAINS value (30 for M.I. Beads).
-    TODO: Automatically trigger grains at a randomized rate.
-    TODO: Start a chain of delayed and pitched grains instead of a single one.
+    - TODO: Automatically trigger grains at a randomized rate.
+    - TODO: Start a chain of delayed and pitched grains instead of a single one.
 * Grain parameters
-    - TIME: Controls the playback position within the table.
+    - TIME: Controls the playback position within the table. 
         NO NO NO! When the FREEZE toggle button is engaged, as the input signal isn't changing anymore, a slice
         from the table is continuously looped to simulate a live feed. The duration of the slice depends
-        on the TIME knob.
-        When the the audio isn't FREEZEd, the TIME knob delays the grains.
+        on the TIME knob. 
+        When the the audio isn't FREEZEd, the TIME knob delays the grains. 
     - SIZE: Grain duration from 0.03 seconds to the table length, forward or backward playback.
     - SHAPE: The shape of the grain envelope. The shape control allows to morph the shape from a square
         (in this case the grain original amplitude is maintained), to an inverted saw (slow release), to a triangle
         (attack and release time are the same), and finally to a saw (slow attack).
-    - PITCH: The pitch of the grain (-2..+2 octaves).
+    - PITCH: The pitch of the grain (-2..+2 octaves).  
     Note: The four grain parameters are latched when a grain is triggered. Hence, the grain parameters
             remain the same throughout the grain playback but they may differ for multiple grains.
-    TODO: TIME slew limiter for tape like scrubing effect. 
+    - TODO: TIME slew limiter for tape like scrubing effect.
 
 #### Usage
 
