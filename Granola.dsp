@@ -135,7 +135,7 @@ environment {
 
         * grain_number: (int > 0) a constant number identifying each instance of the _grain function. This parameter 
           is currently unused.
-        * trigger: [0|1] A rising front of the trigger parameter fires the playback of a grain.
+        * trigger: [0|1] A rising edge of the trigger parameter fires the playback of a grain.
         * writeIndex: (int ∈ [0, tablesize - 1]) the current position of the _table writeIndex.
         * g_active: (int ∈ [1, `CONCURRENT_GRAINS`]) a number used to differenciate succesive grains playback.
           It is increased at each triggered grain (modulo the number of _grain instances). At the moment, it
@@ -146,14 +146,14 @@ environment {
         * pitch_ctrl: (float > 0) a ratio of the playback speed relative to `ma.SR`.
         * reverse_ctrl: [0|1] 0: forward playback, 1: backward playback.
         * plateau_width_ctrl: [0, 1] the width of the window envelope plateau. The window envelope has 3 parts:
-          a raising edge, a plateau (of amplitude 1), a falling edge. When the plateau width equals 0, the raising
-          edge is immediatly followed by the falling edge and, when the plateau width equals 1, raising and falling 
+          a rising edge, a plateau (of amplitude 1), a falling edge. When the plateau width equals 0, the rising
+          edge is immediatly followed by the falling edge and, when the plateau width equals 1, rising and falling 
           edge are instantaneous.
         * plateau_position_ctrl: [0, 1] the position of the window envelope plateau. When 0: the plateau is at the
-          beginning of the window (it implies an instantaneous raising edge), when 1: the plateau is at the end of
+          beginning of the window (it implies an instantaneous rising edge), when 1: the plateau is at the end of
           the window (it implies an instantaneous falling edge).
     */
-    _grain(grain_number, trigger, writeIndex, g_active, time_ctrl,size_ctrl, pitch_ctrl, reverse_ctrl,
+    _grain(grain_number, trigger, writeIndex, g_active, time_ctrl, size_ctrl, pitch_ctrl, reverse_ctrl,
            plateau_width_ctrl, plateau_position_ctrl) = (writeIndex, _, readIndex : _table : *(envelope)), gate
     with {
         // g_size: the number of samples of the grain
@@ -163,11 +163,8 @@ environment {
         g_speed = pitch_ctrl;
         g_playback_size = g_size / g_speed : ba.latch(trigger) : int;
         g_direction = select2(reverse_ctrl, 1, -1) : ba.latch(trigger);
-        // If recording is not FREEZEd, TIME controls the grain distance from the record head (up to 1 tablesize).
-        // If recording is FREEZEd, TIME controls how far the grains (the play heads) are distributed
+        // TIME controls how far the grains (the play heads) are distributed
         // across the table. This way, two consecutive SEEDing produce two different grains.
-//        g_start_index =
-//            writeIndex + (_tablesize * time_ctrl * select2(writeIndex == writeIndex', 1, g_active / CONCURRENT_GRAINS)) : ba.latch(trigger) : int;
         g_start_index =
             writeIndex + (_tablesize * time_ctrl * g_active / CONCURRENT_GRAINS) : ba.latch(trigger) : int;
         // compute window attack and sustain in proportions of the total envelope
@@ -272,7 +269,7 @@ environment {
 
         // DC offset may appear with short grains, it is removed with the dcblockerat filter stage
         // grain() has 8 parameters: g_active and the audio input + 6 control signals
-        g_voices = voices(CONCURRENT_GRAINS, _grain, 9, trigger) : fi.dcblockerat(16);
+        g_voices = voices(CONCURRENT_GRAINS, _grain, 9, 1, trigger) : fi.dcblockerat(16);
     };
 
     ui(uix) =
@@ -334,24 +331,53 @@ with {
 
 /* --- Utility functions ---------------------------------------------------------------- */
 
-voices(VOICE_COUNT, voice, VOICE_PARAM_COUNT, trigger) =
-    ((_ * trigger), si.bus(VOICE_PARAM_COUNT) : parallel_voices(VOICE_COUNT,voice, VOICE_PARAM_COUNT)) ~ _ : !,_
+/*
+    The voices function implements a simple polyphony system that distributes triggers on
+    parallel voice functions.
+
+    #### Usage
+
+    ```
+    si.bus(VOICE_PARAM_COUNT) : voices(VOICE_COUNT, voice, VOICE_PARAM_COUNT, VOICE_OUTPUT_COUNT, trigger) : _
+    ```
+
+    Where:
+
+    * VOICE_COUNT: (int) number of simultaneous voices.
+    * VOICE_PARAM_COUNT: (int) number of parameters routed to the voices.
+    * VOICE_OUTPUT_COUNT: (int) number of outputs routed from the voices.
+    * trigger: [0|1] a rising edge triggers a voice among those available. If none are available,
+      the trigger is ignored.
+    * voice: A function with (VOICE_PARAM_COUNT + 2) parameters and (VOICE_OUTPUT_COUNT + 1) outputs.
+      The 2 mandatory parameters are: 
+      - _voice_number_: (int > 0) an unique id for each voice.
+      - _trigger_: [0|1] a rising edge triggers the voice.
+      - Other parameters depends on the voice implementation and are up to the programmer.
+
+      The voice function outputs are:
+      - VOICE_OUTPUT_COUNT signals corresponding to the actual voice output/job.
+      - A gate equal to 1 when the voice is busy/unavailable producing the expected signal.
+
+*/
+voices(VOICE_COUNT, voice, VOICE_PARAM_COUNT, VOICE_OUTPUT_COUNT, trigger) =
+    ((_ * trigger), si.bus(VOICE_PARAM_COUNT) : parallel_voices(voice)) ~ _ : !, si.bus(VOICE_OUTPUT_COUNT)
 with {
     // parallel_voices
     // The voices are numbered from 1 to VOICE_COUNT
     //  inputs
-    //      a trigger with a value corresponding with an available (the last/greatest) voice
-    //      VOICE_PARAM_COUNT parallel signals in the order expected by the voice
+    //      The voice
+    //      A trigger with a value corresponding with an available (the last/greatest) voice
     //  outputs
-    //      the number of the last available voice (0 meaning that there is no more voice available)
-    //      the summed outputs of the voices
-     parallel_voices(VOICE_COUNT,voice, VOICE_PARAM_COUNT, voice_trigger) =
+    //      The number of the last available voice (0 meaning that there is no more voice available)
+    //      The summed outputs of the voices
+     parallel_voices(voice, voice_trigger) =
         voice_trigger_bus, voice_param_bus : ro.interleave(VOICE_COUNT,VOICE_PARAM_COUNT + 1) :
-            par(v, VOICE_COUNT, voice_wrapper(voice, v + 1)) : ro.interleave(2,VOICE_COUNT) :
-                (si.bus(VOICE_COUNT) :> _), ba.parallelMax(VOICE_COUNT) : ro.cross(2)
+            par(v, VOICE_COUNT, voice_wrapper(voice, v + 1)) : ro.interleave(VOICE_OUTPUT_COUNT + 1,VOICE_COUNT) :
+                voice_output_bus, ba.parallelMax(VOICE_COUNT) : ro.crossn1(VOICE_OUTPUT_COUNT)
     with {
         voice_trigger_bus = voice_trigger <: si.bus(VOICE_COUNT);
         voice_param_bus = par(b, VOICE_PARAM_COUNT, _ <: si.bus(VOICE_COUNT));
+        voice_output_bus = par(b, VOICE_OUTPUT_COUNT, si.bus(VOICE_COUNT) :> _);
 
         // As a voice, voice_wrapper has 2 outputs, a signal and a gate. However the voice and voice_wrapper
         //gates behaves inversely as described in the following table:
@@ -362,7 +388,7 @@ with {
         // When the voice gate is greater than 0, it means that the voice is busy. So when the voice_wrapper
         // gate is greater than 0, it means that the corresponding voice is free to be used.
         voice_wrapper(voice, v, called_voice) =
-            voice(v, v == called_voice) : _, ((1 - _) * v);
+            voice(v, v == called_voice) : si.bus(VOICE_OUTPUT_COUNT), ((1 - _) * v);
     };
 };
 
