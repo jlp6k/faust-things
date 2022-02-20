@@ -9,7 +9,7 @@ declare license "GNU General Public License v3 or later";
 // Granola is a granular audio live feed processor.
 // Copyright (C) 2022 Jean-Louis Paquelin <jlp@studionex.com>
 //
-// Granola is free software: you can redistribute it and/or modify
+// Granola is a free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // any later version.
@@ -202,8 +202,8 @@ environment {
     };
 
     /*
-        grains function get the control values. Some are processed locally the rest is passed to the parallelized
-        grain functions.
+        The grains function gets multiple parameters in order to control grain creation. Some parameters 
+        are processed locally the rest is passed to the parallelized _grain-functions.
 
         #### Usage
 
@@ -272,6 +272,21 @@ environment {
         g_voices = voices(CONCURRENT_GRAINS, _grain, 9, 1, trigger) : fi.dcblockerat(16);
     };
 
+    /*
+        The ui function builds a Granola's user interface and then, pass their values to the grains function.
+
+        #### Usage
+
+        ```
+        _ : ui(uix) : _
+        ```
+
+        Where:
+
+        * uix: (int) the id of the Granola's UI instance.
+
+        Note: Multiple Granola instances share the same user interface when they have the same uix.
+    */
     ui(uix) =
         hgroup("granola %uix",
                grains(freeze_ui, writeIndex_ui, density_ui, seed_ui, input_gain_ui, feedback_ui, output_gain_ui,
@@ -321,6 +336,16 @@ environment {
         */
     };
 
+    /*
+        The demo function builds a Granola instance with a limiter, a low-pass filter and a reverb
+        connected to its (stereo) output.
+
+        #### Usage
+
+        ```
+        _ : demo : _, _
+        ```
+    */
     demo = Granola(5, 33).ui(0) : co.limiter_1176_R4_mono : hgroup("utilities", fi.resonlp(cutoff_freq,Q,gain) <: dm.zita_light)
 with {
     cutoff_freq = hslider("v:resonlp/[0]cutoff_freq",8000,0,8000,0.01) : si.smoo;
