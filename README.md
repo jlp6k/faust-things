@@ -34,7 +34,7 @@ The grain processor is inspired by the Mutable Instruments Beads. The grain wind
     - SHAPE: The shape of the grain envelope. The shape control allows to morph the shape from a square
         (in this case the grain original amplitude is maintained), to an inverted saw (slow release), to a triangle
         (attack and release time are the same), and finally to a saw (slow attack).  
-        ![Window envelope from the shape parameter value](images/Granola/Window shape.gif)
+        ![Window envelope from the shape parameter value](blob/main/images/Granola/Window%20shape.gif)
     - PITCH: The pitch of the grain (-2..+2 octaves).  
     Note: The four grain parameters are latched when a grain is triggered. Hence, the grain parameters
             remain the same throughout the grain playback but they may differ for multiple grains.
