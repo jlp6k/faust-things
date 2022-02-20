@@ -81,6 +81,11 @@ declare license "GNU General Public License v3 or later";
     #### Examples
 
     ```
+    // A Granola's demonstration setup with a 5 seconds buffer and an up-to-15-grains polyphony.
+    process = Granola(5, 15).demo;
+    ```
+
+    ```
     // A Granola grain processor.
     // It has a 1 second audio buffer and up to 30 grains playing a the same time.
     process = Granola(1, 30).ui(0);
@@ -100,11 +105,28 @@ declare license "GNU General Public License v3 or later";
 
     ```
     // As the Granola grain processor is able to play many copies of the input signal simultaneously,
-    // it may rapidly saturate its output. This could be avoided by manualy reducing the output gain or
-    // by placing a limiter in the circuit path.
+    // it may rapidly saturate its output. This could be avoided by manualy reducing the output gain,
+    // by selecting a smoother grain-window shape and/or by placing a limiter in the circuit path. 
     // Also note that Granola pairs well with a reverb.
     process = Granola(2, 30).ui(0) : co.limiter_1176_R4_mono <: dm.zita_light;
     ```
+
+    ```
+    // Granola used as a delay like effect. Parameters are taylored for the default audio file
+    // of the Faust web IDE (wait 5 seconds to let the table be filled). Play it looped.
+    process = Granola(5, 10).grains(0, _, 4.76, 0, 0.5, 0, 0.5, 0.5, 0.03, 0.5, 1, 0, 0, 0.5);
+    ```
+
+    ```
+    // Granola used as a complex feedback effect: the most important parameter here is the 6th,
+    // the feedback control. Feed the input with some audio (the looped  default audio file, for
+    // example). Let the feedback grow. It will gradually decrease when the sound is muted.
+    //
+    // __Be careful with your ears, this can get very loud.__
+    //
+    process = Granola(5, 10).grains(0, _, 4.72, 0, 1, 0.4, 1, 0.6, 0.604, 3, 0.972, 0, 0, 0.5);
+    ```
+
 */
 
 // The code below is organized in 2 parts: The Granola grain processor, then some
