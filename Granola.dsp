@@ -3,8 +3,14 @@ import("stdfaust.lib");
 declare name "Granola";
 declare author "Jean-Louis Paquelin";
 declare copyright "Copyright (C) 2022 Jean-Louis Paquelin <jlp@studionex.com>";
-declare version "2022.2.0";  // The version number is YYYY.M.n
+declare version "2022.3.2";  // The version number is YYYY.M.n
 declare license "GNU General Public License v3 or later";
+
+// In order to test this program, please uncomment the following line by removing the initial //
+//process = Granola(5, 15).demo;
+// It will create a Granola with a 5 seconds buffer and 15 grains at most.
+// Feel free to test other parameter values (w/r to your computer's power).
+// A short documentation is available below.
 
 // Granola is a granular audio live feed processor.
 // Copyright (C) 2022 Jean-Louis Paquelin <jlp@studionex.com>
@@ -368,7 +374,7 @@ environment {
         _ : demo : _, _
         ```
     */
-    demo = Granola(5, 33).ui(0) : co.limiter_1176_R4_mono : hgroup("utilities", fi.resonlp(cutoff_freq,Q,gain) <: dm.zita_light)
+    demo = ui(0) : co.limiter_1176_R4_mono : hgroup("utilities", fi.resonlp(cutoff_freq,Q,gain) <: dm.zita_light)
 with {
     cutoff_freq = hslider("v:resonlp/[0]cutoff_freq",8000,0,8000,0.01) : si.smoo;
     Q = hslider("v:resonlp/[1]Q",1,1,10,0.01) : si.smoo;
